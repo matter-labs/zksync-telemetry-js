@@ -3,11 +3,13 @@
 A comprehensive guide to integrating the ZKSync Telemetry library into your TypeScript/JavaScript CLI application, with detailed examples and best practices.
 
 ## Prerequisites
+
 - Node.js (v14 or higher)
 - npm, yarn, or pnpm
 - A TypeScript/JavaScript CLI application
 
 ## Table of Contents
+
 1. [Installation](#1-installation)
 2. [Basic Integration](#2-basic-integration)
 3. [Usage Patterns](#3-usage-patterns)
@@ -41,8 +43,13 @@ Create a new file called `telemetry.ts` (or `.js`) to manage your telemetry inst
 // src/telemetry.ts
 import { Telemetry } from 'zksync-telemetry';
 
-export async function initializeTelemetry() {
-  const telemetry = await Telemetry.initialize('your-cli-name');
+export function initializeTelemetry() {
+  const telemetry = Telemetry.initialize(
+    'your-cli-name',
+    'your-cli-version',
+    'your-config-file-name',
+    'your-posthog-key',
+  );
 
   // Handle graceful shutdown
   process.on('SIGINT', async () => {
@@ -61,9 +68,9 @@ export async function initializeTelemetry() {
 // Create a singleton instance
 let telemetryInstance: Telemetry | null = null;
 
-export async function getTelemetry() {
+export function getTelemetry() {
   if (!telemetryInstance) {
-    telemetryInstance = await initializeTelemetry();
+    telemetryInstance = initializeTelemetry();
   }
   return telemetryInstance;
 }
@@ -73,23 +80,21 @@ export async function getTelemetry() {
 
 ```typescript
 // src/cli.ts
-import { Command } from 'commander';  // or your preferred CLI framework
+import { Command } from 'commander'; // or your preferred CLI framework
 import { getTelemetry } from './telemetry';
 
 async function main() {
-  const telemetry = await getTelemetry();
+  const telemetry = getTelemetry();
   const program = new Command();
 
-  program
-    .name('your-cli')
-    .version('1.0.0');
+  program.name('your-cli').version('1.0.0');
 
   program
     .command('hello')
     .description('Say hello')
-    .action(async () => {
-      await telemetry.trackEvent('command_executed', {
-        command: 'hello'
+    .action(() => {
+      telemetry.trackEvent('command_executed', {
+        command: 'hello',
       });
       console.log('Hello, World!');
     });
@@ -97,10 +102,10 @@ async function main() {
   await program.parseAsync(process.argv);
 }
 
-main().catch(async (error) => {
-  const telemetry = await getTelemetry();
+main().catch((error) => {
+  const telemetry = getTelemetry();
   telemetry.trackError(error, {
-    context: 'cli_initialization'
+    context: 'cli_initialization',
   });
   console.error('Error:', error);
   process.exit(1);
@@ -112,11 +117,11 @@ main().catch(async (error) => {
 ### Tracking Command Execution
 
 ```typescript
-await telemetry.trackEvent('command_executed', {
+telemetry.trackEvent('command_executed', {
   command: 'deploy',
   duration_ms: 1500,
   cache_used: true,
-  network: 'testnet'
+  network: 'testnet',
 });
 ```
 
@@ -126,16 +131,16 @@ await telemetry.trackEvent('command_executed', {
 const startTime = Date.now();
 try {
   await someOperation();
-  await telemetry.trackEvent('operation_completed', {
+  telemetry.trackEvent('operation_completed', {
     operation: 'contract_deployment',
     duration_ms: Date.now() - startTime,
-    status: 'success'
+    status: 'success',
   });
 } catch (error) {
-  await telemetry.trackEvent('operation_failed', {
+  telemetry.trackEvent('operation_failed', {
     operation: 'contract_deployment',
     duration_ms: Date.now() - startTime,
-    status: 'failure'
+    status: 'failure',
   });
   throw error;
 }
@@ -152,7 +157,7 @@ try {
   telemetry.trackError(error as Error, {
     operation: 'contract_deployment',
     network: 'mainnet',
-    last_action: 'compilation'
+    last_action: 'compilation',
   });
   throw error;
 }
@@ -167,7 +172,7 @@ class OperationHandler {
   constructor() {
     this.context = {
       handler_id: crypto.randomUUID(),
-      start_time: Date.now()
+      start_time: Date.now(),
     };
   }
 
@@ -175,7 +180,7 @@ class OperationHandler {
     return {
       ...this.context,
       ...additional,
-      duration_ms: Date.now() - this.context.start_time
+      duration_ms: Date.now() - this.context.start_time,
     };
   }
 
@@ -183,11 +188,12 @@ class OperationHandler {
     try {
       await this.riskyOperation();
     } catch (error) {
-      const telemetry = await getTelemetry();
-      telemetry.trackError(error as Error, 
+      const telemetry = getTelemetry();
+      telemetry.trackError(
+        error as Error,
         this.enrichErrorContext({
-          last_successful_step: this.lastStep
-        })
+          last_successful_step: this.lastStep,
+        }),
       );
       throw error;
     }
@@ -213,29 +219,29 @@ export abstract class BaseCommand {
     this.startTime = Date.now();
   }
 
-  async initialize() {
-    this.telemetry = await getTelemetry();
+  initialize() {
+    this.telemetry = getTelemetry();
   }
 
-  protected async trackCommandExecution(
+  protected trackCommandExecution(
     command: string,
     status: 'success' | 'failure',
-    additionalProps: Record<string, any> = {}
+    additionalProps: Record<string, any> = {},
   ) {
     const duration = Date.now() - this.startTime;
-    
-    await this.telemetry.trackEvent('command_executed', {
+
+    this.telemetry.trackEvent('command_executed', {
       command,
       status,
       duration_ms: duration,
-      ...additionalProps
+      ...additionalProps,
     });
   }
 
   protected handleError(error: Error, context: Record<string, any> = {}) {
     this.telemetry.trackError(error, {
       duration_ms: Date.now() - this.startTime,
-      ...context
+      ...context,
     });
   }
 }
@@ -243,20 +249,20 @@ export abstract class BaseCommand {
 // Example command implementation
 export class DeployCommand extends BaseCommand {
   async execute(options: any) {
-    await this.initialize();
+    this.initialize();
 
     try {
       await this.deploy(options);
-      
-      await this.trackCommandExecution('deploy', 'success', {
+
+      this.trackCommandExecution('deploy', 'success', {
         network: options.network,
-        optimization: options.optimization
+        optimization: options.optimization,
       });
     } catch (error) {
-      await this.trackCommandExecution('deploy', 'failure');
+      this.trackCommandExecution('deploy', 'failure');
       this.handleError(error as Error, {
         command: 'deploy',
-        options
+        options,
       });
       throw error;
     }
@@ -270,17 +276,17 @@ export class DeployCommand extends BaseCommand {
 
 ```typescript
 // DO: Track non-sensitive information
-await telemetry.trackEvent('wallet_action', {
+telemetry.trackEvent('wallet_action', {
   action: 'balance_check',
   network: 'mainnet',
-  has_sufficient_funds: true
+  has_sufficient_funds: true,
 });
 
 // DON'T: Track sensitive information
-await telemetry.trackEvent('wallet_action', {
-  wallet_address: '0x123...',  // PII - don't track
-  private_key: '...',          // Sensitive - don't track
-  balance: '1000'              // Sensitive - don't track
+telemetry.trackEvent('wallet_action', {
+  wallet_address: '0x123...', // PII - don't track
+  private_key: '...', // Sensitive - don't track
+  balance: '1000', // Sensitive - don't track
 });
 ```
 
@@ -294,17 +300,17 @@ class PerformanceTracker {
     this.startTimes.set(operation, Date.now());
   }
 
-  async endOperation(operation: string, success: boolean) {
+  endOperation(operation: string, success: boolean) {
     const startTime = this.startTimes.get(operation);
     if (!startTime) return;
 
     const duration = Date.now() - startTime;
-    const telemetry = await getTelemetry();
-    
-    await telemetry.trackEvent('operation_completed', {
+    const telemetry = getTelemetry();
+
+    telemetry.trackEvent('operation_completed', {
       operation,
       duration_ms: duration,
-      success
+      success,
     });
 
     this.startTimes.delete(operation);
@@ -317,10 +323,12 @@ class PerformanceTracker {
 ### Common Issues and Solutions
 
 1. **Telemetry Not Working in CI Environment**
+
    - This is expected behavior. The library automatically disables telemetry in non-interactive environments.
    - To override: Use a custom config path with pre-configured consent.
 
 2. **Events Not Being Tracked**
+
    - Check if telemetry is enabled (user might have disabled it)
    - Verify network connectivity
    - Check if the application has proper shutdown handling
@@ -332,18 +340,18 @@ class PerformanceTracker {
 ### Health Check
 
 ```typescript
-async function checkTelemetryHealth() {
-  const telemetry = await getTelemetry();
-  
+function checkTelemetryHealth() {
+  const telemetry = getTelemetry();
+
   try {
     // Test event tracking
-    await telemetry.trackEvent('health_check', {
-      timestamp: Date.now()
+    telemetry.trackEvent('health_check', {
+      timestamp: Date.now(),
     });
-    
+
     // Test error tracking
     telemetry.trackError(new Error('Health check error'));
-    
+
     console.log('Telemetry health check passed');
   } catch (error) {
     console.error('Telemetry health check failed:', error);
@@ -352,6 +360,7 @@ async function checkTelemetryHealth() {
 ```
 
 Remember:
+
 - Telemetry is off by default and requires user consent
 - The library handles sensitive data removal automatically
 - Automatic reconnection is built-in for network issues
