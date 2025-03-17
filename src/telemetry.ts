@@ -4,7 +4,7 @@ import { ConfigManager } from './config';
 import { PostHog, PostHogOptions } from 'posthog-node';
 
 const posthogOptions: PostHogOptions = {
-  enableExceptionAutocapture: true,
+  enableExceptionAutocapture: false,
   disableGeoip: false,
   flushAt: 1,
   flushInterval: 0,

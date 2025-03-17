@@ -39,10 +39,10 @@ const types_1 = require("./types");
 const config_1 = require("./config");
 const posthog_node_1 = require("posthog-node");
 const posthogOptions = {
-    enableExceptionAutocapture: true,
+    enableExceptionAutocapture: false,
     disableGeoip: false,
     flushAt: 1,
-    flushInterval: 0
+    flushInterval: 0,
 };
 class Telemetry {
     constructor(config, posthogClient, posthogKey, sentryInitialized = false, sentryDsn, appName = 'unknown', appVersion = 'unknown') {
