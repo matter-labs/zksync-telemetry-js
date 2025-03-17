@@ -1,7 +1,13 @@
 import * as Sentry from '@sentry/node';
 import { TelemetryConfig, TelemetryError } from './types';
 import { ConfigManager } from './config';
-import { PostHog } from 'posthog-node';
+import { PostHog, PostHogOptions } from 'posthog-node';
+
+const posthogOptions: PostHogOptions = {
+  enableExceptionAutocapture: true,
+  disableGeoip: false,
+  flushAt: 1,
+};
 
 export class Telemetry {
   private config: TelemetryConfig;
@@ -33,9 +39,7 @@ export class Telemetry {
   private reconnectPostHog(): void {
     if (this.config.enabled && this.posthogKey && !this.posthog) {
       try {
-        this.posthog = new PostHog(this.posthogKey, {
-          enableExceptionAutocapture: true,
-        });
+        this.posthog = new PostHog(this.posthogKey, posthogOptions);
       } catch (error) {
         throw new TelemetryError(
           `Failed to reconnect to PostHog: ${error}`,
@@ -81,9 +85,7 @@ export class Telemetry {
     if (config.enabled) {
       if (posthogKey) {
         try {
-          posthogClient = new PostHog(posthogKey, {
-            enableExceptionAutocapture: true,
-          });
+          posthogClient = new PostHog(posthogKey, posthogOptions);
         } catch (error) {
           throw new TelemetryError(
             `Failed to initialize PostHog: ${error}`,
@@ -143,7 +145,9 @@ export class Telemetry {
       this.posthog.capture({
         distinctId: this.config.instance_id,
         event: eventName,
-        properties: enrichedProperties,
+        properties: {
+          props: enrichedProperties,
+        },
       });
     } catch (error) {
       throw new TelemetryError(
@@ -200,7 +204,8 @@ export class Telemetry {
       app: appName,
       app_version: appVersion,
       platform: process.platform,
-      zksync_telemetry_version: process.env.npm_package_version || 'unknown',
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      zksync_telemetry_version: require('../package.json').version || 'unknown',
       node_version: process.version,
     };
   }
