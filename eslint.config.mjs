@@ -26,4 +26,7 @@ export default [
       quotes: ['error', 'single'],
     },
   },
+  {
+    ignores: ["dist/*"]
+  }
 ];
