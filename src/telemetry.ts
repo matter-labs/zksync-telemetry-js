@@ -7,6 +7,7 @@ const posthogOptions: PostHogOptions = {
   enableExceptionAutocapture: true,
   disableGeoip: false,
   flushAt: 1,
+  flushInterval: 0,
 };
 
 export class Telemetry {

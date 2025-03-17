@@ -38,6 +38,12 @@ const Sentry = __importStar(require("@sentry/node"));
 const types_1 = require("./types");
 const config_1 = require("./config");
 const posthog_node_1 = require("posthog-node");
+const posthogOptions = {
+    enableExceptionAutocapture: true,
+    disableGeoip: false,
+    flushAt: 1,
+    flushInterval: 0
+};
 class Telemetry {
     constructor(config, posthogClient, posthogKey, sentryInitialized = false, sentryDsn, appName = 'unknown', appVersion = 'unknown') {
         this.sentryInitialized = false;
@@ -52,9 +58,7 @@ class Telemetry {
     reconnectPostHog() {
         if (this.config.enabled && this.posthogKey && !this.posthog) {
             try {
-                this.posthog = new posthog_node_1.PostHog(this.posthogKey, {
-                    enableExceptionAutocapture: true,
-                });
+                this.posthog = new posthog_node_1.PostHog(this.posthogKey, posthogOptions);
             }
             catch (error) {
                 throw new types_1.TelemetryError(`Failed to reconnect to PostHog: ${error}`, 'INITIALIZATION_ERROR');
@@ -86,9 +90,7 @@ class Telemetry {
         if (config.enabled) {
             if (posthogKey) {
                 try {
-                    posthogClient = new posthog_node_1.PostHog(posthogKey, {
-                        enableExceptionAutocapture: true,
-                    });
+                    posthogClient = new posthog_node_1.PostHog(posthogKey, posthogOptions);
                 }
                 catch (error) {
                     throw new types_1.TelemetryError(`Failed to initialize PostHog: ${error}`, 'INITIALIZATION_ERROR');
@@ -130,7 +132,9 @@ class Telemetry {
             this.posthog.capture({
                 distinctId: this.config.instance_id,
                 event: eventName,
-                properties: enrichedProperties,
+                properties: {
+                    props: enrichedProperties,
+                },
             });
         }
         catch (error) {
@@ -178,7 +182,8 @@ class Telemetry {
             app: appName,
             app_version: appVersion,
             platform: process.platform,
-            zksync_telemetry_version: process.env.npm_package_version || 'unknown',
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            zksync_telemetry_version: require('../package.json').version || 'unknown',
             node_version: process.version,
         };
     }
