@@ -1,187 +1,224 @@
 import * as Sentry from '@sentry/node';
 import { TelemetryConfig, TelemetryError } from './types';
 import { ConfigManager } from './config';
-import { PostHog } from 'posthog-node';
-import { TELEMETRY_KEYS, POSTHOG_URL } from './constants';
+import { PostHog, PostHogOptions } from 'posthog-node';
+
+const posthogOptions: PostHogOptions = {
+  enableExceptionAutocapture: false,
+  disableGeoip: false,
+  flushAt: 1,
+  flushInterval: 0,
+};
 
 export class Telemetry {
   private config: TelemetryConfig;
   private posthog?: PostHog;
+  private posthogKey?: string;
   private sentryInitialized: boolean = false;
+  private sentryDsn?: string;
   private appName: string;
+  private appVersion: string;
 
   private constructor(
     config: TelemetryConfig,
     posthogClient?: PostHog,
-    appName: string = 'unknown'
+    posthogKey?: string,
+    sentryInitialized: boolean = false,
+    sentryDsn?: string,
+    appName: string = 'unknown',
+    appVersion: string = 'unknown',
   ) {
     this.config = config;
     this.posthog = posthogClient;
+    this.posthogKey = posthogKey;
     this.appName = appName;
+    this.appVersion = appVersion;
+    this.sentryInitialized = sentryInitialized;
+    this.sentryDsn = sentryDsn;
   }
 
-  private async reconnectPostHog(): Promise<void> {
-    if (this.config.enabled && !this.posthog) {
+  private reconnectPostHog(): void {
+    if (this.config.enabled && this.posthogKey && !this.posthog) {
       try {
-        this.posthog = new PostHog(
-          TELEMETRY_KEYS.posthogKey,
-          {
-            host: POSTHOG_URL,
-          }
-        );
+        this.posthog = new PostHog(this.posthogKey, posthogOptions);
       } catch (error) {
-        console.error('Failed to reconnect to PostHog:', error);
+        throw new TelemetryError(
+          `Failed to reconnect to PostHog: ${error}`,
+          'INITIALIZATION_ERROR',
+        );
       }
     }
   }
 
-  private async reconnectSentry(): Promise<void> {
-    if (this.config.enabled && !this.sentryInitialized) {
+  private reconnectSentry(): void {
+    if (this.config.enabled && this.sentryDsn && !this.sentryInitialized) {
       try {
         Sentry.init({
-          dsn: TELEMETRY_KEYS.sentryDsn,
+          dsn: this.sentryDsn,
           release: process.env.npm_package_version,
           initialScope: {
-            tags: {
-              app: this.appName,
-              version: process.env.npm_package_version || 'unknown',
-              platform: process.platform
-            }
-          }
+            tags: Telemetry.getDefaultEventProps(this.appName, this.appVersion),
+          },
         });
         this.sentryInitialized = true;
       } catch (error) {
-        console.error('Failed to reconnect to Sentry:', error);
+        throw new TelemetryError(
+          `Failed to reconnect to Sentry: ${error}`,
+          'INITIALIZATION_ERROR',
+        );
       }
     }
   }
 
-  static async initialize(
+  static initialize(
     appName: string,
-    customConfigPath?: string
-  ): Promise<Telemetry> {
-    const config = await ConfigManager.load(appName, customConfigPath);
+    appVersion: string,
+    configName: string,
+    posthogKey?: string,
+    sentryDsn?: string,
+    customConfigPath?: string,
+  ): Telemetry {
+    const config = ConfigManager.load(configName, customConfigPath);
+    let posthogClient: PostHog | undefined;
+    let sentryInitialized = false;
 
     // Only initialize clients if telemetry is enabled
     if (config.enabled) {
-      let posthogClient: PostHog | undefined;
-      let sentryInitialized = false;
-
-      try {
-        posthogClient = new PostHog(
-          TELEMETRY_KEYS.posthogKey,
-          {
-            host: POSTHOG_URL,
-          }
-        );
-      } catch (error) {
-        console.error('Failed to initialize PostHog:', error);
+      if (posthogKey) {
+        try {
+          posthogClient = new PostHog(posthogKey, posthogOptions);
+        } catch (error) {
+          throw new TelemetryError(
+            `Failed to initialize PostHog: ${error}`,
+            'INITIALIZATION_ERROR',
+          );
+        }
       }
 
-      try {
-        Sentry.init({
-          dsn: TELEMETRY_KEYS.sentryDsn,
-          release: process.env.npm_package_version,
-          initialScope: {
-            tags: {
-              app: appName,
-              version: process.env.npm_package_version || 'unknown',
-              platform: process.platform
-            }
-          }
-        });
-        sentryInitialized = true;
-      } catch (error) {
-        console.error('Failed to initialize Sentry:', error);
+      if (sentryDsn) {
+        try {
+          Sentry.init({
+            dsn: sentryDsn,
+            release: process.env.npm_package_version,
+            initialScope: {
+              tags: Telemetry.getDefaultEventProps(appName, appVersion),
+            },
+          });
+          sentryInitialized = true;
+        } catch (error) {
+          throw new TelemetryError(
+            `Failed to initialize Sentry: ${error}`,
+            'INITIALIZATION_ERROR',
+          );
+        }
       }
-
-      const telemetry = new Telemetry(
-        config,
-        posthogClient,
-        appName
-      );
-      telemetry.sentryInitialized = sentryInitialized;
-      return telemetry;
     }
 
-    return new Telemetry(config, undefined, appName);
+    return new Telemetry(
+      config,
+      posthogClient,
+      posthogKey,
+      sentryInitialized,
+      sentryDsn,
+      appName,
+      appVersion,
+    );
   }
 
-  async trackEvent(
-    eventName: string,
-    properties: Record<string, any> = {}
-  ): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  trackEvent(eventName: string, properties: Record<string, any> = {}): void {
     if (!this.config.enabled) {
       return;
     }
 
     // Try to reconnect if PostHog is not available
+    this.reconnectPostHog();
     if (!this.posthog) {
-      await this.reconnectPostHog();
-      if (!this.posthog) {
-        return; // Still not available after reconnection attempt
-      }
+      return; // Still not available after reconnection attempt
     }
 
     try {
       const enrichedProperties = {
         ...properties,
-        distinct_id: this.config.instanceId,
-        platform: process.platform,
-        version: process.env.npm_package_version || 'unknown',
-        node_version: process.version
+        ...Telemetry.getDefaultEventProps(this.appName, this.appVersion),
       };
 
-      await this.posthog.capture({
-        distinctId: this.config.instanceId,
+      this.posthog.capture({
+        distinctId: this.config.instance_id,
         event: eventName,
-        properties: enrichedProperties
+        properties: {
+          props: enrichedProperties,
+        },
       });
     } catch (error) {
       throw new TelemetryError(
         `Failed to track event: ${error}`,
-        'EVENT_TRACKING_ERROR'
+        'EVENT_TRACKING_ERROR',
       );
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   trackError(error: Error, context: Record<string, any> = {}): void {
     if (!this.config.enabled) {
       return;
     }
 
-    // Try to reconnect if Sentry is not initialized
-    if (!this.sentryInitialized) {
-      this.reconnectSentry().catch(error => {
-        console.error('Failed to reconnect to Sentry:', error);
-      });
+    if (this.sentryDsn) {
+      // Try to reconnect if Sentry is not initialized
+      this.reconnectSentry();
       if (!this.sentryInitialized) {
         return; // Still not initialized after reconnection attempt
       }
-    }
 
-    Sentry.withScope((scope) => {
-      scope.setExtras({
-        ...context,
-        platform: process.platform,
-        version: process.env.npm_package_version,
-        instanceId: this.config.instanceId
+      Sentry.withScope((scope) => {
+        scope.setExtras({
+          ...context,
+          ...Telemetry.getDefaultEventProps(this.appName, this.appVersion),
+          instanceId: this.config.instance_id,
+        });
+
+        Sentry.captureException(error);
       });
+    } else if (this.posthogKey) {
+      // Try to reconnect if PostHog is not available
+      this.reconnectPostHog();
+      if (!this.posthog) {
+        return; // Still not available after reconnection attempt
+      }
 
-      Sentry.captureException(error);
-    });
+      try {
+        this.posthog.captureException(error, this.config.instance_id, {
+          ...Telemetry.getDefaultEventProps(this.appName, this.appVersion),
+        });
+      } catch (error) {
+        throw new TelemetryError(
+          `Failed to track error: ${error}`,
+          'EVENT_TRACKING_ERROR',
+        );
+      }
+    }
   }
 
-  async updateConsent(enabled: boolean): Promise<void> {
-    await ConfigManager.updateConsent(this.config, enabled);
+  private static getDefaultEventProps(appName: string, appVersion: string) {
+    return {
+      app: appName,
+      app_version: appVersion,
+      platform: process.platform,
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      zksync_telemetry_version: require('../package.json').version || 'unknown',
+      node_version: process.version,
+    };
+  }
+
+  updateConsent(enabled: boolean): void {
+    ConfigManager.updateConsent(this.config, enabled);
     this.config.enabled = enabled;
 
     // If enabling telemetry, try to reconnect services
     if (enabled) {
-      await Promise.all([
-        this.reconnectPostHog(),
-        this.reconnectSentry()
-      ]);
+      this.reconnectPostHog();
+      this.reconnectSentry();
     }
   }
 
@@ -190,7 +227,7 @@ export class Telemetry {
       await this.posthog.shutdown();
       this.posthog = undefined;
     }
-    
+
     if (this.sentryInitialized) {
       await Sentry.close(2000);
       this.sentryInitialized = false;
