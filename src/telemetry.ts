@@ -189,7 +189,10 @@ export class Telemetry {
 
       try {
         this.posthog.captureException(error, this.config.instance_id, {
-          ...Telemetry.getDefaultEventProps(this.appName, this.appVersion),
+          props: {
+            ...Telemetry.getDefaultEventProps(this.appName, this.appVersion),
+            ...context,
+          },
         });
       } catch (error) {
         throw new TelemetryError(
