@@ -8,8 +8,7 @@
     "test:coverage": "jest --coverage",
     "build": "tsc --build .",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "prepare": "husky"
+    "lint:fix": "eslint . --fix"
   },
   "keywords": [],
   "author": "",
