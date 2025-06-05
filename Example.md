@@ -24,13 +24,13 @@ Install the library using your preferred package manager:
 
 ```bash
 # Using npm
-npm install zksync-telemetry
+npm install matter-labs/zksync-telemetry-js
 
 # Using yarn
-yarn add zksync-telemetry
+yarn add matter-labs/zksync-telemetry-js
 
 # Using pnpm
-pnpm add zksync-telemetry
+pnpm add matter-labs/zksync-telemetry-js
 ```
 
 ## 2. Basic Integration
@@ -41,7 +41,7 @@ Create a new file called `telemetry.ts` (or `.js`) to manage your telemetry inst
 
 ```typescript
 // src/telemetry.ts
-import { Telemetry } from 'zksync-telemetry';
+import { Telemetry } from '@matterlabs/zksync-telemetry-js';
 
 export function initializeTelemetry() {
   const telemetry = Telemetry.initialize(
@@ -208,7 +208,7 @@ class OperationHandler {
 ```typescript
 // src/cli/base-command.ts
 import { Command } from 'commander';
-import { Telemetry } from 'zksync-telemetry';
+import { Telemetry } from '@matterlabs/zksync-telemetry-js';
 import { getTelemetry } from '../telemetry';
 
 export abstract class BaseCommand {
