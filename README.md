@@ -17,13 +17,13 @@ For a detailed integration example, refer: [Example.md](Example.md).
 
 ```bash
 # Using npm
-npm install zksync-telemetry
+npm install matter-labs/zksync-telemetry-js
 
 # Using yarn
-yarn add zksync-telemetry
+yarn add matter-labs/zksync-telemetry-js
 
 # Using pnpm
-pnpm add zksync-telemetry
+pnpm add matter-labs/zksync-telemetry-js
 ```
 
 ## Basic Setup
@@ -31,7 +31,7 @@ pnpm add zksync-telemetry
 ### 1. Initialize Telemetry
 
 ```typescript
-import { Telemetry } from 'zksync-telemetry';
+import { Telemetry } from '@matterlabs/zksync-telemetry-js';
 
 function main() {
   // Simple initialization - no keys needed
@@ -92,7 +92,7 @@ process.on('SIGINT', async () => {
 
 ```typescript
 import { Command } from 'commander'; // or your CLI framework
-import { Telemetry } from 'zksync-telemetry';
+import { Telemetry } from '@matterlabs/zksync-telemetry-js';
 
 class CLI {
   private telemetry: Telemetry;
